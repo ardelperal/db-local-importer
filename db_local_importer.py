@@ -1,232 +1,186 @@
-#!/usr/bin/env python3
-"""
-DB Local Importer - Herramienta independiente para importar bases de datos Access
-
-Funcionalidades:
-1. Copia bases de datos desde ubicaciones remotas (oficina) a ubicaciones locales
-2. Actualiza vínculos de tablas vinculadas para que apunten a bases de datos locales
-3. Mantiene los mismos nombres de archivo que las bases remotas
-
-Autor: Sistema de Gestión
-Fecha: 2024
-"""
-
 import os
 import shutil
 import logging
-from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+import argparse
+from dotenv import load_dotenv
 import win32com.client
 import pythoncom
-from dotenv import load_dotenv
-import argparse
-
-# Configurar logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('db_local_importer.log'),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
 
 class DBLocalImporter:
-    """Clase para importar bases de datos Access a ubicaciones locales"""
+    """Clase para importar bases de datos de Access a un entorno local."""
     
     def __init__(self):
-        """Inicializar configuración"""
-        self.logger = logging.getLogger(__name__)
+        """Inicializa el importador, carga configuración y prepara el logging."""
+        self._setup_logging()
+        self.logger.info("Inicializando DBLocalImporter...")
         
+        # Cargar configuración desde .env
         load_dotenv()
-        self.project_root = Path(__file__).parent
-        self.db_password = os.getenv('DB_PASSWORD', '')
-        self.local_db_dir = os.getenv('LOCAL_DB_DIR', 'dbs-locales')
         
-        # Descubrir automáticamente las bases de datos desde el .env
-        self.databases = self._discover_databases_from_env()
+        self.remote_base_dir = os.getenv('REMOTE_BASE_DIR')
+        self.local_db_dir = os.getenv('LOCAL_DB_DIR')
+        self.db_password = os.getenv('DB_PASSWORD')
+        
+        if not self.remote_base_dir or not self.local_db_dir:
+            self.logger.error("[X] Error: REMOTE_BASE_DIR y LOCAL_DB_DIR deben estar definidos en .env")
+            raise ValueError("Variables de entorno no configuradas")
         
         # Crear directorio local si no existe
-        self._ensure_local_directory()
-    
-    def _discover_databases_from_env(self) -> Dict[str, Tuple[str, str]]:
-        """
-        Descubre automáticamente las bases de datos desde las variables de entorno
-        
-        Returns:
-            Dict con mapeo de bases de datos: {nombre: (remote_path, local_path)}
-        """
-        databases = {}
-        
-        # Obtener todas las variables de entorno
-        env_vars = dict(os.environ)
-        
-        # Buscar variables DB_*
-        db_vars = {k: v for k, v in env_vars.items() if k.startswith('DB_') and k != 'DB_PASSWORD'}
-        
-        for db_var, remote_path in db_vars.items():
-            # Extraer nombre de la base de datos (ej: DB_BRASS -> BRASS)
-            db_name = db_var.replace('DB_', '')
-            
-            # Obtener nombre del archivo desde la ruta remota
-            filename = os.path.basename(remote_path)
-            
-            # Construir ruta local manteniendo el mismo nombre
-            local_path = os.path.join(self.local_db_dir, filename)
-            
-            databases[db_name] = (remote_path, local_path)
-            
-            self.logger.debug(f"Base de datos descubierta: {db_name}")
-            self.logger.debug(f"  Remota: {remote_path}")
-            self.logger.debug(f"  Local: {local_path}")
-        
-        self.logger.info(f"Descubiertas {len(databases)} bases de datos desde .env")
-        return databases
-    
-    def _ensure_local_directory(self):
-        """Crear directorio local si no existe"""
-        # Convertir a ruta absoluta si es relativa
-        if not os.path.isabs(self.local_db_dir):
-            self.local_db_dir = str(self.project_root / self.local_db_dir)
-        
         os.makedirs(self.local_db_dir, exist_ok=True)
-        self.logger.debug(f"Directorio local asegurado: {self.local_db_dir}")
-    
-    def _check_network_accessibility(self) -> bool:
-        """Verifica si las ubicaciones de red remotas son accesibles"""
-        network_locations = set()
         
-        for db_name, (remote_path, local_path) in self.databases.items():
-            if remote_path.startswith('\\\\'):
-                # Extraer la parte del servidor de red
-                parts = remote_path.split('\\')
-                if len(parts) >= 4:
-                    network_root = f"\\\\{parts[2]}\\{parts[3]}"
-                    network_locations.add(network_root)
+        self.databases = self._discover_databases()
+
+    def _setup_logging(self):
+        """Configura el sistema de logging."""
+        self.logger = logging.getLogger('DBLocalImporter')
+        self.logger.setLevel(logging.DEBUG)
         
-        if not network_locations:
-            self.logger.info("No se encontraron ubicaciones de red para verificar")
-            return True
+        # Evitar duplicación de handlers si se reinicializa
+        if self.logger.hasHandlers():
+            self.logger.handlers.clear()
+            
+        # Handler para la consola
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.INFO)
+        formatter = logging.Formatter('%(message)s')
+        ch.setFormatter(formatter)
+        self.logger.addHandler(ch)
         
-        self.logger.info("[NET] Verificando accesibilidad de ubicaciones de red...")
+        # Handler para archivo de log
+        log_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'db_importer.log')
+        fh = logging.FileHandler(log_file_path, mode='w')
+        fh.setLevel(logging.DEBUG)
+        file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        fh.setFormatter(file_formatter)
+        self.logger.addHandler(fh)
         
-        all_accessible = True
-        for network_location in network_locations:
-            try:
-                if os.path.exists(network_location):
-                    self.logger.info(f"  [OK] {network_location} - Accesible")
-                else:
-                    self.logger.error(f"  [X] {network_location} - No accesible")
-                    all_accessible = False
-            except Exception as e:
-                self.logger.error(f"  [X] {network_location} - Error: {e}")
-                all_accessible = False
-        
-        if not all_accessible:
-            self.logger.error("[!] Algunas ubicaciones de red no son accesibles")
-            self.logger.error("   Verifica tu conexión a la red de oficina")
-        
-        return all_accessible
-    
+        self.logger.info(f"Logging configurado. Archivo de log en: {log_file_path}")
+
+    def _discover_databases(self) -> dict:
+        """Descubre las bases de datos a importar desde las variables de entorno."""
+        databases = {}
+        for key, value in os.environ.items():
+            if key.startswith('DB_') and key != 'DB_PASSWORD':
+                db_name = key.lower()
+                remote_path = value
+                
+                # Construir ruta local basada en el nombre de la base remota
+                local_filename = os.path.basename(remote_path)
+                local_path = os.path.join(self.local_db_dir, local_filename)
+                
+                databases[db_name] = (remote_path, local_path)
+                
+        self.logger.info(f"Descubiertas {len(databases)} bases de datos para procesar.")
+        return databases
+
     def show_configuration(self):
-        """Muestra la configuración descubierta desde el .env"""
-        self.logger.info("=== CONFIGURACIÓN DESCUBIERTA ===")
-        self.logger.info(f"Directorio local: {self.local_db_dir}")
-        self.logger.info(f"Contraseña configurada: {'Sí' if self.db_password else 'No'}")
-        
-        if not self.databases:
-            self.logger.warning("No se encontraron bases de datos configuradas")
-            return
+        """Muestra la configuración actual."""
+        self.logger.info("=== Configuración Actual ===")
+        self.logger.info(f"Directorio base remoto: {self.remote_base_dir}")
+        self.logger.info(f"Directorio local de BD: {self.local_db_dir}")
+        self.logger.info(f"Contraseña de BD: {'Sí' if self.db_password else 'No'}")
+        self.logger.info("Bases de datos a procesar:")
         
         for db_name, (remote_path, local_path) in self.databases.items():
-            filename = os.path.basename(remote_path)
-            
-            self.logger.info(f"\n[DB] {db_name}:")
-            self.logger.info(f"  Archivo: {filename}")
-            self.logger.info(f"  Remota: {remote_path}")
-            self.logger.info(f"  Local: {local_path}")
-            
-            # Verificar existencia
-            exists_remote = "[OK]" if os.path.exists(remote_path) else "[X]"
-            exists_local = "[OK]" if os.path.exists(local_path) else "[X]"
-            
-            self.logger.info(f"  Estado remoto: {exists_remote}")
-            self.logger.info(f"  Estado local: {exists_local}")
+            self.logger.info(f"  - {db_name}:")
+            self.logger.info(f"    Remoto: {remote_path}")
+            self.logger.info(f"    Local:  {local_path}")
+        self.logger.info("===========================")
+
+    def _check_network_accessibility(self) -> bool:
+        """Verifica si las rutas de red remotas son accesibles."""
+        self.logger.info("Verificando accesibilidad de red...")
+        all_accessible = True
         
-        self.logger.info("=" * 50)
-    
+        # Verificar directorio base
+        if not os.path.exists(self.remote_base_dir):
+            self.logger.error(f"[X] Directorio base remoto no accesible: {self.remote_base_dir}")
+            all_accessible = False
+        else:
+            self.logger.info(f"  [OK] Directorio base accesible: {self.remote_base_dir}")
+        
+        # Verificar cada base de datos remota
+        for db_name, (remote_path, _) in self.databases.items():
+            if not os.path.exists(remote_path):
+                self.logger.warning(f"  [!] {db_name} - Ruta remota no accesible: {remote_path}")
+                # No marcamos como error fatal, puede que solo se quieran actualizar vínculos
+            else:
+                self.logger.info(f"  [OK] {db_name} - Ruta remota accesible")
+                
+        return all_accessible
+
+    def _check_access_availability(self) -> bool:
+        """Verifica si la aplicación Microsoft Access está disponible."""
+        try:
+            pythoncom.CoInitialize()
+            win32com.client.Dispatch("Access.Application")
+            pythoncom.CoUninitialize()
+            self.logger.info("[OK] Microsoft Access detectado.")
+            return True
+        except Exception as e:
+            self.logger.error("[X] Error: Microsoft Access no parece estar instalado o accesible.")
+            self.logger.debug(f"    Detalles del error: {e}")
+            return False
+
     def copy_databases(self) -> bool:
-        """
-        Copia todas las bases de datos desde ubicaciones remotas a locales
-        
-        Returns:
-            bool: True si todas las copias fueron exitosas
-        """
+        """Copia todas las bases de datos desde la ubicación remota a la local."""
         self.logger.info("=== Iniciando copia de bases de datos ===")
         success_count = 0
         total_count = len(self.databases)
         
         for db_name, (remote_path, local_path) in self.databases.items():
+            self.logger.info(f"Procesando {db_name}...")
+            
             try:
-                filename = os.path.basename(remote_path)
-                
-                self.logger.info(f"[COPY] Procesando {db_name} ({filename})...")
-                
                 if not os.path.exists(remote_path):
-                    self.logger.error(f"  [X] Archivo remoto no encontrado: {remote_path}")
+                    self.logger.warning(f"  [SKIP] No se encontró la base remota: {remote_path}")
                     continue
                 
-                # Manejo especial para base de datos de correos
-                if 'correos' in filename.lower():
+                # Lógica especial para DB_CORREOS
+                if db_name == 'db_correos':
                     if self._setup_correos_database_light(remote_path, local_path):
-                        self.logger.info(f"  [OK] {db_name} configurada exitosamente (modo ligero)")
                         success_count += 1
-                    else:
-                        self.logger.error(f"  [X] Error configurando {db_name} en modo ligero")
-                else:
-                    # Copia normal
-                    try:
-                        shutil.copy2(remote_path, local_path)
-                        self.logger.info(f"  [OK] {db_name} copiada exitosamente")
-                        success_count += 1
-                    except Exception as e:
-                        self.logger.error(f"  [X] Error copiando {db_name}: {e}")
-                        
+                    continue
+
+                # Lógica general para otras bases de datos
+                self.logger.info(f"  Copiando {remote_path} -> {local_path}")
+                shutil.copy2(remote_path, local_path)
+                self.logger.info(f"  [OK] Copia de {db_name} completada.")
+                success_count += 1
+                
             except Exception as e:
-                self.logger.error(f"[X] Error procesando {db_name}: {e}")
+                self.logger.error(f"  [X] Error copiando {db_name}: {e}")
         
-        self.logger.info(f"=== Copia completada: {success_count}/{total_count} exitosas ===")
-        return success_count == total_count
-    
+        self.logger.info(f"=== Copia finalizada: {success_count}/{total_count} exitosas ===")
+        return success_count > 0
+
     def _setup_correos_database_light(self, remote_path: str, local_path: str) -> bool:
-        """
-        Configura la base de datos de correos en modo ligero (solo últimos 5 registros)
-        """
+        """Crea una versión ligera de la base de datos de Correos."""
+        self.logger.info("  [SPECIAL] Creando versión ligera de DB_CORREOS...")
+        
         try:
-            filename = os.path.basename(local_path)
-            
-            self.logger.info(f"  [EMAIL] Configurando base de correos (modo ligero)...")
-            
-            # Si la base local existe, eliminarla para recrearla
+            # Si ya existe, la eliminamos para recrearla
             if os.path.exists(local_path):
-                self.logger.info(f"  [DELETE] Eliminando base local existente...")
                 os.remove(local_path)
             
-            # Crear la base de datos desde cero
-            if not self._create_database_from_scratch(remote_path, local_path):
+            # Crear la base de datos vacía con la estructura correcta
+            if not self._create_empty_database_with_structure(remote_path, local_path):
                 return False
             
-            # Llenar con los últimos 5 registros
-            return self._fill_database_with_latest_records(remote_path, local_path)
-                
+            # Llenar con los últimos registros
+            if not self._fill_database_with_latest_records(remote_path, local_path):
+                return False
+            
+            self.logger.info("  [OK] Versión ligera de DB_CORREOS creada exitosamente.")
+            return True
+            
         except Exception as e:
-            self.logger.error(f"  [X] Error configurando base de correos: {e}")
+            self.logger.error(f"  [X] Error creando DB_CORREOS ligera: {e}")
             return False
-    
-    def _create_database_from_scratch(self, remote_path: str, local_path: str) -> bool:
-        """Crea una base de datos Access desde cero con estructura idéntica a la remota"""
-        import pyodbc
+
+    def _create_empty_database_with_structure(self, remote_path: str, local_path: str) -> bool:
+        """Crea una base de datos Access vacía con la misma estructura que la remota."""
+        pythoncom.CoInitialize()
         
         try:
             filename = os.path.basename(local_path)
@@ -560,7 +514,9 @@ class DBLocalImporter:
             return True
             
         except Exception as e:
+            import traceback
             self.logger.error(f"  [X] Error actualizando vínculos: {e}")
+            self.logger.debug(traceback.format_exc())
             return False
         finally:
             pythoncom.CoUninitialize()
@@ -588,8 +544,12 @@ class DBLocalImporter:
             bool: True si todo el proceso fue exitoso
         """
         self.logger.info("[START] Iniciando importación de bases de datos locales")
-        
+
         try:
+            # Primero, verificar si Access está disponible
+            if not self._check_access_availability():
+                return False
+
             # Mostrar configuración
             self.show_configuration()
             
