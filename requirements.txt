@@ -1,0 +1,4 @@
+python-dotenv>=1.0.0
+pywin32>=306
+pyodbc>=4.0.39
+pathlib2>=2.3.7; python_version < '3.4'

@@ -1,0 +1,38 @@
+# Archivos de entorno
+.env
+
+# Archivos de Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Archivos de bases de datos locales
+*.accdb
+*.mdb
+*.laccdb
+*.ldb
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
