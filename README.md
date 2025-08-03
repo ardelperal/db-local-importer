@@ -11,18 +11,71 @@ Herramienta independiente para importar bases de datos Microsoft Access desde ub
 - ✅ **Verificación de red**: Comprueba accesibilidad antes de proceder
 - ✅ **Logging detallado**: Registro completo de todas las operaciones
 - ✅ **Modo solo vínculos**: Actualiza vínculos sin copiar bases de datos
+- ✅ **Entorno virtual**: Instalación aislada y portable
 
-## Instalación
+## Instalación y Configuración
 
-### Requisitos
-- Python 3.7+
+### Requisitos del Sistema
+- Python 3.7+ (recomendado Python 3.8 o superior)
 - Microsoft Access instalado
 - Acceso a las bases de datos remotas (red de oficina)
 
-### Dependencias
+### Instalación con Entorno Virtual (Recomendado)
+
+#### 1. Clonar o descargar el proyecto
+```bash
+# Si usas Git
+git clone <url-del-repositorio>
+cd db-local-importer
+
+# O simplemente descarga y extrae la carpeta del proyecto
+```
+
+#### 2. Crear entorno virtual
+```bash
+# Crear entorno virtual
+python -m venv venv
+
+# Activar entorno virtual
+# En Windows:
+venv\Scripts\activate
+
+# En Linux/Mac:
+source venv/bin/activate
+```
+
+#### 3. Instalar dependencias
+```bash
+# Con el entorno virtual activado
+pip install -r requirements.txt
+```
+
+#### 4. Verificar instalación
+```bash
+python db_local_importer.py --help
+```
+
+### Instalación Global (Alternativa)
+Si prefieres no usar entorno virtual:
 ```bash
 pip install -r requirements.txt
 ```
+
+### Uso en Diferentes Ubicaciones
+
+#### Opción A: Copiar proyecto completo
+1. Copia toda la carpeta `db-local-importer` a la ubicación deseada
+2. Crea un nuevo entorno virtual en esa ubicación
+3. Instala las dependencias
+4. Configura tu archivo `.env`
+
+#### Opción B: Instalación portable
+1. Crea una carpeta para tu proyecto específico
+2. Copia solo los archivos necesarios:
+   - `db_local_importer.py`
+   - `requirements.txt`
+   - `.env.example` (renombrar a `.env`)
+3. Sigue los pasos de instalación con entorno virtual
 
 ## Configuración
 
@@ -63,6 +116,15 @@ tu-proyecto/
 
 ## Uso
 
+### Activar entorno virtual (si lo usas)
+```bash
+# En Windows:
+venv\Scripts\activate
+
+# En Linux/Mac:
+source venv/bin/activate
+```
+
 ### Proceso completo (copia + vínculos)
 ```bash
 python db_local_importer.py
@@ -76,6 +138,11 @@ python db_local_importer.py --links-only
 ### Solo verificar conectividad
 ```bash
 python db_local_importer.py --check-network
+```
+
+### Desactivar entorno virtual
+```bash
+deactivate
 ```
 
 ## Funcionalidades especiales
@@ -103,21 +170,43 @@ Todas las operaciones se registran en:
 ## Casos de uso
 
 ### Desarrollo local
-Cuando trabajas desde casa o sin acceso a la red de oficina, ejecuta:
+Cuando trabajas desde casa o sin acceso a la red de oficina:
 ```bash
+# Activar entorno virtual
+venv\Scripts\activate  # Windows
+# source venv/bin/activate  # Linux/Mac
+
+# Ejecutar importación completa
 python db_local_importer.py
+
+# Desactivar cuando termines
+deactivate
 ```
 
 ### Actualización periódica
 Para actualizar solo los vínculos después de cambios en la estructura:
 ```bash
+# Activar entorno virtual
+venv\Scripts\activate  # Windows
+
+# Actualizar solo vínculos
 python db_local_importer.py --links-only
+
+# Desactivar
+deactivate
 ```
 
 ### Verificación de conectividad
 Para comprobar si puedes acceder a las bases remotas:
 ```bash
+# Activar entorno virtual
+venv\Scripts\activate  # Windows
+
+# Verificar conectividad
 python db_local_importer.py --check-network
+
+# Desactivar
+deactivate
 ```
 
 ## Solución de problemas
@@ -139,10 +228,132 @@ python db_local_importer.py --check-network
 
 ## Integración en otros proyectos
 
-Para usar esta herramienta en otros proyectos:
+### Método 1: Copia completa con entorno virtual
+Para usar esta herramienta en otros proyectos de forma aislada:
 
-1. Copia la carpeta completa a tu proyecto
-2. Modifica el archivo `.env` con tus bases de datos
-3. Ejecuta el script según tus necesidades
+1. **Copia la carpeta completa** a tu nuevo proyecto:
+   ```bash
+   cp -r db-local-importer/ /ruta/a/tu/nuevo/proyecto/
+   cd /ruta/a/tu/nuevo/proyecto/db-local-importer/
+   ```
 
-La herramienta es completamente independiente y no tiene dependencias específicas del proyecto original.
+2. **Crea un nuevo entorno virtual**:
+   ```bash
+   python -m venv venv
+   venv\Scripts\activate  # Windows
+   # source venv/bin/activate  # Linux/Mac
+   ```
+
+3. **Instala las dependencias**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Configura tu archivo `.env`**:
+   ```bash
+   cp .env.example .env
+   # Edita .env con tus bases de datos específicas
+   ```
+
+5. **Ejecuta según tus necesidades**:
+   ```bash
+   python db_local_importer.py
+   ```
+
+### Método 2: Instalación mínima
+Para una instalación más ligera:
+
+1. **Crea carpeta para el importador**:
+   ```bash
+   mkdir mi-proyecto/db-importer
+   cd mi-proyecto/db-importer
+   ```
+
+2. **Copia solo archivos esenciales**:
+   - `db_local_importer.py`
+   - `requirements.txt`
+   - `.env.example` → renombrar a `.env`
+
+3. **Configura entorno virtual**:
+   ```bash
+   python -m venv venv
+   venv\Scripts\activate  # Windows
+   pip install -r requirements.txt
+   ```
+
+4. **Personaliza configuración**:
+   - Edita `.env` con tus bases de datos
+   - Ajusta rutas según tu proyecto
+
+### Método 3: Script de instalación automática
+Crea un script `setup_db_importer.bat` (Windows) o `setup_db_importer.sh` (Linux/Mac):
+
+**Windows (`setup_db_importer.bat`):**
+```batch
+@echo off
+echo Configurando DB Local Importer...
+
+REM Crear entorno virtual
+python -m venv venv
+call venv\Scripts\activate.bat
+
+REM Instalar dependencias
+pip install -r requirements.txt
+
+REM Copiar archivo de configuración
+if not exist .env copy .env.example .env
+
+echo.
+echo ¡Configuración completada!
+echo.
+echo Para usar:
+echo 1. Activa el entorno: venv\Scripts\activate
+echo 2. Edita el archivo .env con tus bases de datos
+echo 3. Ejecuta: python db_local_importer.py
+echo 4. Desactiva cuando termines: deactivate
+pause
+```
+
+**Linux/Mac (`setup_db_importer.sh`):**
+```bash
+#!/bin/bash
+echo "Configurando DB Local Importer..."
+
+# Crear entorno virtual
+python3 -m venv venv
+source venv/bin/activate
+
+# Instalar dependencias
+pip install -r requirements.txt
+
+# Copiar archivo de configuración
+if [ ! -f .env ]; then
+    cp .env.example .env
+fi
+
+echo ""
+echo "¡Configuración completada!"
+echo ""
+echo "Para usar:"
+echo "1. Activa el entorno: source venv/bin/activate"
+echo "2. Edita el archivo .env con tus bases de datos"
+echo "3. Ejecuta: python db_local_importer.py"
+echo "4. Desactiva cuando termines: deactivate"
+```
+
+### Ventajas del uso con entornos virtuales
+
+✅ **Aislamiento**: Las dependencias no interfieren con otros proyectos  
+✅ **Portabilidad**: Fácil de mover entre diferentes máquinas  
+✅ **Versionado**: Control preciso de versiones de dependencias  
+✅ **Limpieza**: Fácil de eliminar sin afectar el sistema  
+✅ **Múltiples proyectos**: Diferentes configuraciones por proyecto  
+
+### Notas importantes
+
+- **Siempre activa el entorno virtual** antes de usar la herramienta
+- **Cada proyecto puede tener su propia configuración** de bases de datos
+- **El entorno virtual se puede eliminar** sin afectar Python del sistema
+- **Mantén actualizado** el archivo `requirements.txt` si añades dependencias
+
+La herramienta es completamente independiente y portable cuando se usa con entornos virtuales.
