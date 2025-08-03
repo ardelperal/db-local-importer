@@ -44,19 +44,58 @@ venv\Scripts\activate
 source venv/bin/activate
 ```
 
-#### 3. Instalar dependencias
+#### 3. Configurar proxy (si es necesario)
+Si tu oficina usa proxy para acceso a internet, configúralo antes de instalar dependencias:
+
+**Con proxy:**
 ```bash
-# Con el entorno virtual activado
+# En Windows:
+set HTTP_PROXY=http://185.46.212.88:80
+set HTTPS_PROXY=http://185.46.212.88:80
+
+# En Linux/Mac:
+export HTTP_PROXY=http://185.46.212.88:80
+export HTTPS_PROXY=http://185.46.212.88:80
+```
+
+**Sin proxy:**
+```bash
+# En Windows:
+set HTTP_PROXY=
+set HTTPS_PROXY=
+
+# En Linux/Mac:
+unset HTTP_PROXY
+unset HTTPS_PROXY
+```
+
+#### 4. Instalar dependencias
+```bash
+# Con el entorno virtual activado (y proxy configurado si es necesario)
 pip install -r requirements.txt
 ```
 
-#### 4. Verificar instalación
+#### 5. Verificar instalación
 ```bash
 python db_local_importer.py --help
 ```
 
 ### Instalación Global (Alternativa)
 Si prefieres no usar entorno virtual:
+
+**Con proxy:**
+```bash
+# Configurar proxy primero
+set HTTP_PROXY=http://185.46.212.88:80  # Windows
+set HTTPS_PROXY=http://185.46.212.88:80  # Windows
+# export HTTP_PROXY=http://185.46.212.88:80  # Linux/Mac
+# export HTTPS_PROXY=http://185.46.212.88:80  # Linux/Mac
+
+# Instalar dependencias
+pip install -r requirements.txt
+```
+
+**Sin proxy:**
 ```bash
 pip install -r requirements.txt
 ```
@@ -225,6 +264,48 @@ deactivate
 - Verifica que Microsoft Access esté instalado
 - Ejecuta como administrador si es necesario
 - Comprueba que las bases locales existan
+
+### Problemas con pip y proxy
+
+#### Error: "pip no puede descargar paquetes" o "Connection timeout"
+Si estás en una oficina con proxy, configura las variables de entorno:
+
+**Windows:**
+```cmd
+set HTTP_PROXY=http://185.46.212.88:80
+set HTTPS_PROXY=http://185.46.212.88:80
+pip install -r requirements.txt
+```
+
+**Linux/Mac:**
+```bash
+export HTTP_PROXY=http://185.46.212.88:80
+export HTTPS_PROXY=http://185.46.212.88:80
+pip install -r requirements.txt
+```
+
+#### Error: "pip funciona pero sigue fallando"
+Prueba con parámetros adicionales de pip:
+```bash
+pip install -r requirements.txt --proxy http://185.46.212.88:80 --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org
+```
+
+#### Si no hay proxy (desde casa o red sin proxy)
+Asegúrate de limpiar las variables de proxy:
+
+**Windows:**
+```cmd
+set HTTP_PROXY=
+set HTTPS_PROXY=
+pip install -r requirements.txt
+```
+
+**Linux/Mac:**
+```bash
+unset HTTP_PROXY
+unset HTTPS_PROXY
+pip install -r requirements.txt
+```
 
 ## Integración en otros proyectos
 
